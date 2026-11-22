@@ -1,0 +1,23 @@
+# ==============================================================================
+# PDFtrack - Override para Escalamiento Horizontal del Extractor (5 Réplicas)
+# ==============================================================================
+# Este archivo se combina con docker-compose.yml (y opcionalmente con
+# docker-compose.build.yml en desarrollo):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.5-replicas.yml up
+#
+# Sobreescribe EXCLUSIVAMENTE la definición de despliegue del extractor.
+# Traefik v3 ya cuenta con balanceo p2c (Power of Two Random Choices),
+# maxIdleConnsPerHost: 2 y resolución dinámica por DNS de Docker (round-robin multi-A),
+# por lo que descubre y balancea el tráfico entre las 5 réplicas en caliente
+# sin requerir montar docker.sock ni reconfigurar el proxy.
+# ==============================================================================
+
+services:
+  extractor:
+    deploy:
+      replicas: 5
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768m

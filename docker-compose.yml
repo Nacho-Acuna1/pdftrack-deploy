@@ -1,0 +1,138 @@
+# ==============================================================================
+# PDFtrack - Producción (Imágenes Publicadas)
+# ==============================================================================
+# Orquestación completa de servicios, red interna aislada, volúmenes de datos,
+# healthchecks y límites de recursos estrictos para el sistema PDFtrack.
+# ==============================================================================
+
+services:
+  proxy:
+    image: ${PROXY_IMAGE:-pdftrack-proxy:latest}
+    ports:
+      - "${PUBLIC_PORT:-80}:${PUBLIC_PORT:-80}"
+    environment:
+      - PUBLIC_PORT=${PUBLIC_PORT:-80}
+      - INTERNAL_PING_PORT=${INTERNAL_PING_PORT:-8082}
+      - EXTRACTOR_HOST=${EXTRACTOR_HOST:-extractor}
+      - EXTRACTOR_PORT=${EXTRACTOR_PORT:-8000}
+      - DOCUMENTS_HOST=${DOCUMENTS_HOST:-documents}
+      - DOCUMENTS_PORT=${DOCUMENTS_PORT:-8001}
+      - MAX_REQUEST_BODY_BYTES=${MAX_REQUEST_BODY_BYTES:-57671680}
+      - MEM_REQUEST_BODY_BYTES=${MEM_REQUEST_BODY_BYTES:-2097152}
+      - PROXY_READ_TIMEOUT=${PROXY_READ_TIMEOUT:-35s}
+      - PROXY_CONNECT_TIMEOUT=${PROXY_CONNECT_TIMEOUT:-5s}
+      - PROXY_SEND_TIMEOUT=${PROXY_SEND_TIMEOUT:-35s}
+      - PROXY_GRACE_TIMEOUT=${PROXY_GRACE_TIMEOUT:-30s}
+      - TRAEFIK_LOG_LEVEL=${TRAEFIK_LOG_LEVEL:-WARN}
+    depends_on:
+      extractor:
+        condition: service_healthy
+      documents:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pdftrack-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128m
+    stop_grace_period: 35s
+
+  extractor:
+    image: ${EXTRACTOR_IMAGE:-pdftrack-extractor:latest}
+    environment:
+      - PORT=${PORT:-8000}
+      - EXTRACTION_WORKERS=${EXTRACTION_WORKERS:-1}
+      - EXTRACTION_QUEUE_SIZE=${EXTRACTION_QUEUE_SIZE:-1}
+      - QUEUE_WAIT_TIMEOUT_SECONDS=${QUEUE_WAIT_TIMEOUT_SECONDS:-0}
+      - EXTRACTION_TIMEOUT_SECONDS=${EXTRACTION_TIMEOUT_SECONDS:-30}
+      - MAX_PDF_SIZE_MB=${MAX_PDF_SIZE_MB:-50}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    expose:
+      - "8000"
+    restart: unless-stopped
+    networks:
+      - pdftrack-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768m
+    stop_grace_period: 35s
+
+  documents:
+    image: ${DOCUMENTS_IMAGE:-pdftrack-documents:latest}
+    environment:
+      - PORT=${DOCUMENTS_PORT:-8001}
+      - DOCUMENTS_PORT=${DOCUMENTS_PORT:-8001}
+      - MONGODB_URL=${MONGODB_URL:-mongodb://mongodb:27017}
+      - MONGODB_DB_NAME=${MONGODB_DB_NAME:-pdftrack}
+      - MONGODB_COLLECTION_NAME=${MONGODB_COLLECTION_NAME:-documents}
+      - MAX_PDF_SIZE_MB=${MAX_PDF_SIZE_MB:-50}
+      - DEFAULT_PAGE_LIMIT=${DEFAULT_PAGE_LIMIT:-20}
+      - MAX_PAGE_LIMIT=${MAX_PAGE_LIMIT:-100}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    expose:
+      - "8001"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pdftrack-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/api/health/live')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512m
+    stop_grace_period: 15s
+
+  mongodb:
+    image: mongo:7.0
+    expose:
+      - "27017"
+    volumes:
+      - mongodb-data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=${MONGO_INITDB_DATABASE:-pdftrack}
+    restart: unless-stopped
+    networks:
+      - pdftrack-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256m
+
+networks:
+  pdftrack-net:
+    driver: bridge
+
+volumes:
+  mongodb-data:
+    driver: local

@@ -1,0 +1,28 @@
+# ==============================================================================
+# PDFtrack - Override para Desarrollo Local (Build desde paths)
+# ==============================================================================
+# Este archivo NUNCA se utiliza solo; se aplica siempre como capa override sobre
+# docker-compose.yml para compilar las imágenes directamente desde el código fuente
+# de los repositorios hermanos:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+#
+# Sobreescribe EXCLUSIVAMENTE los bloques "build" de los servicios propios.
+# El servicio mongodb no incluye build ya que consume la imagen oficial mongo:7.0.
+# ==============================================================================
+
+services:
+  proxy:
+    build:
+      context: ${PROXY_PATH:-../pdftrack-proxy}
+      dockerfile: Dockerfile
+
+  extractor:
+    build:
+      context: ${EXTRACTOR_PATH:-../pdftrack-extractor}
+      dockerfile: Dockerfile
+
+  documents:
+    build:
+      context: ${DOCUMENTS_PATH:-../pdftrack-documents}
+      dockerfile: Dockerfile
