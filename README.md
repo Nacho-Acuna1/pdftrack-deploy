@@ -95,7 +95,7 @@ Todas las solicitudes deben dirigirse a `http://localhost:${PUBLIC_PORT:-80}`. T
 
 | Método | Path | Prioridad | Upstream | Descripción |
 | :--- | :--- | :---: | :---: | :--- |
-| `POST` | `/extract` | **100** | `extractor-svc` | Extracción síncrona de texto y metadatos de PDF (Multipart o Binary). Protegido por middleware de buffering (máx. 55 MiB). |
+| `POST` | `/extract` | **100** | `extractor-svc` | Extracción síncrona de texto y metadatos de PDF (Multipart o Binary). Streaming directo sin middleware de buffering. |
 | `GET` | `/health/live` | **100** | `extractor-svc` | Liveness probe del extractor (HTTP 200). |
 | `GET` | `/health/ready` | **100** | `extractor-svc` | Readiness probe del extractor (HTTP 200). |
 | `GET` | `/openapi.json` | **100** | `extractor-svc` | Especificación OpenAPI 3.1 del extractor. |
@@ -264,13 +264,13 @@ Para garantizar previsibilidad y reproducibilidad durante los benchmarks, se apl
 ┌──────────────┬─────────────┬──────────────┬────────────────────────┐
 │ Servicio     │ Límite CPU  │ Límite RAM   │ stop_grace_period      │
 ├──────────────┼─────────────┼──────────────┼────────────────────────┤
-│ proxy        │ 0.25 CPU    │ 128 MiB      │ 35 segundos            │
+│ proxy        │ 0.50 CPU    │ 128 MiB      │ 35 segundos            │
 │ extractor    │ 1.00 CPU    │ 768 MiB      │ 35 segundos (x réplica)│
 │ documents    │ 0.50 CPU    │ 512 MiB      │ 15 segundos            │
 │ mongodb      │ 0.50 CPU    │ 256 MiB      │ N/A (Docker default)   │
 └──────────────┴─────────────┴──────────────┴────────────────────────┘
 
-Consumo Global con 1 Réplica:   2.25 CPUs  |  1.664 GiB RAM
+Consumo Global con 1 Réplica:   2.50 CPUs  |  1.664 GiB RAM
 Consumo Global con 5 Réplicas:  6.25 CPUs  |  5.504 GiB RAM
 ```
 
