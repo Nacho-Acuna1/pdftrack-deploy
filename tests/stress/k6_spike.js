@@ -22,14 +22,14 @@ const targetUrl = targetUrlRaw.endsWith("/extract")
   ? targetUrlRaw
   : `${targetUrlRaw.replace(/\/$/, "")}/extract`;
 
-const pdfDir = (__ENV.PDF_DIR || "./tests/stress/pdfs").replace(/\/$/, "");
+const pdfDir = (__ENV.PDF_DIR || "/tests/stress/pdfs").replace(/\/$/, "");
 
 // 4 PDFs oficiales de la cátedra
 const pdfFileNames = [
-  "Guide-Spanish-LatinSouth-American.pdf",
-  "Filosofia Lean.pdf",
   "scrum_manager_historias_usuario.pdf",
+  "Filosofia Lean.pdf",
   "Essential-Kanban-Condensed-Spanish.pdf",
+  "Guide-Spanish-LatinSouth-American.pdf",
 ];
 
 // Carga en memoria binaria de los 4 PDFs oficiales en contexto init
@@ -43,19 +43,32 @@ function loadPdfs(baseDir) {
   });
 }
 
-let pdfs;
-try {
-  pdfs = loadPdfs(pdfDir);
-} catch (_) {
+const candidateDirs = [
+  __ENV.PDF_DIR,
+  "/tests/stress/pdfs",
+  "./tests/stress/pdfs",
+  "./pdfs",
+  "/workspace/tests/stress/pdfs",
+].filter(Boolean);
+
+let pdfs = null;
+let lastError = null;
+
+for (const dir of candidateDirs) {
   try {
-    pdfs = loadPdfs("./tests/stress/pdfs");
-  } catch (_) {
-    try {
-      pdfs = loadPdfs("./pdfs");
-    } catch (err) {
-      pdfs = loadPdfs("/workspace/tests/stress/pdfs");
+    pdfs = loadPdfs(dir.replace(/\/$/, ""));
+    if (pdfs && pdfs.length === 4) {
+      break;
     }
+  } catch (err) {
+    lastError = err;
   }
+}
+
+if (!pdfs) {
+  throw new Error(
+    `No se pudieron cargar los 4 PDFs requeridos: ${lastError ? lastError.message : "Error desconocido"}`
+  );
 }
 
 // Métricas obligatorias: 3 categorías de respuesta
@@ -161,10 +174,31 @@ export function handleSummary(data) {
   const rateReqs = data.metrics.http_reqs
     ? data.metrics.http_reqs.values.rate.toFixed(2)
     : "0.00";
+
+  const p50Duration =
+    data.metrics.http_req_duration &&
+    data.metrics.http_req_duration.values["med"] !== undefined
+      ? (data.metrics.http_req_duration.values["med"] / 1000).toFixed(2)
+      : (data.metrics.http_req_duration && data.metrics.http_req_duration.values["p(50)"] !== undefined
+        ? (data.metrics.http_req_duration.values["p(50)"] / 1000).toFixed(2)
+        : "0.00");
+
+  const p90Duration =
+    data.metrics.http_req_duration &&
+    data.metrics.http_req_duration.values["p(90)"] !== undefined
+      ? (data.metrics.http_req_duration.values["p(90)"] / 1000).toFixed(2)
+      : "0.00";
+
   const p95Duration =
     data.metrics.http_req_duration &&
-    data.metrics.http_req_duration.values["p(95)"]
+    data.metrics.http_req_duration.values["p(95)"] !== undefined
       ? (data.metrics.http_req_duration.values["p(95)"] / 1000).toFixed(2)
+      : "0.00";
+
+  const maxDuration =
+    data.metrics.http_req_duration &&
+    data.metrics.http_req_duration.values["max"] !== undefined
+      ? (data.metrics.http_req_duration.values["max"] / 1000).toFixed(2)
       : "0.00";
 
   const meetsThresholds = countFallos === 0 && parseFloat(p95Duration) < 30;
@@ -190,7 +224,10 @@ export function handleSummary(data) {
 --------------------------------------------------------------------------------
  Total Peticiones Generadas:      ${totalReqs}
  Throughput Global:               ${rateReqs} req/s (Referencia cátedra: > 25.35 req/s)
+ Latencia p(50):                  ${p50Duration} s
+ Latencia p(90):                  ${p90Duration} s
  Latencia p(95):                  ${p95Duration} s   (Referencia cátedra: < 30.00 s)
+ Latencia Máxima:                 ${maxDuration} s
 --------------------------------------------------------------------------------
  Resultado del Test: ${
    meetsThresholds
@@ -198,11 +235,10 @@ export function handleSummary(data) {
      : "FALLIDO (Incumple thresholds obligatorios)"
  }
 ================================================================================
- Reporte JSON guardado en: tests/stress/results/k6-summary.json
 `;
 
   return {
     stdout: summaryText,
-    "tests/stress/results/k6-summary.json": JSON.stringify(data, null, 2),
+    "/tests/stress/results/k6-report.json": JSON.stringify(data, null, 2),
   };
 }

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # ==============================================================================
 # PDFtrack - Vegeta Stress Test (Modelo Abierto de Carga)
 # ==============================================================================
@@ -15,9 +15,10 @@
 #   - Payload: Rota secuencialmente los 4 PDFs oficiales
 # ==============================================================================
 
-set -euo pipefail
+set -eu
+set -o pipefail 2>/dev/null || true
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PDF_DIR="$SCRIPT_DIR/pdfs"
 RESULTS_DIR="$SCRIPT_DIR/results"
@@ -26,15 +27,13 @@ RESULTS_DIR="$SCRIPT_DIR/results"
 mkdir -p "$RESULTS_DIR"
 
 # 2. Verificar que los 4 PDFs oficiales existen antes de iniciar
-PDF_FILES=(
-  "Guide-Spanish-LatinSouth-American.pdf"
-  "Filosofia Lean.pdf"
-  "scrum_manager_historias_usuario.pdf"
-  "Essential-Kanban-Condensed-Spanish.pdf"
-)
+PDF_1="scrum_manager_historias_usuario.pdf"
+PDF_2="Filosofia Lean.pdf"
+PDF_3="Essential-Kanban-Condensed-Spanish.pdf"
+PDF_4="Guide-Spanish-LatinSouth-American.pdf"
 
 echo "==> Verificando existencia de los 4 PDFs oficiales en $PDF_DIR..."
-for pdf in "${PDF_FILES[@]}"; do
+for pdf in "$PDF_1" "$PDF_2" "$PDF_3" "$PDF_4"; do
   if [ ! -f "$PDF_DIR/$pdf" ]; then
     echo "ERROR: Falta el archivo PDF requerido: $PDF_DIR/$pdf" >&2
     echo "Por favor verifique que los 4 PDFs oficiales de la cátedra estén presentes." >&2
@@ -44,18 +43,17 @@ done
 echo ">> Todos los PDFs oficiales verificados correctamente."
 
 # Configuración de red y destino
-PUBLIC_PORT="${PUBLIC_PORT:-80}"
-TARGET_URL="http://localhost:${PUBLIC_PORT}/extract"
+TARGET_URL="${TARGET_URL:-http://proxy/extract}"
 
 echo "==> Generando archivo de objetivos para Vegeta (Destino: $TARGET_URL)..."
 TARGETS_FILE="$RESULTS_DIR/vegeta-targets.txt"
 rm -f "$TARGETS_FILE"
 
-for pdf in "${PDF_FILES[@]}"; do
+for pdf in "$PDF_1" "$PDF_2" "$PDF_3" "$PDF_4"; do
   cat <<EOF >> "$TARGETS_FILE"
 POST $TARGET_URL
 Content-Type: application/pdf
-@tests/stress/pdfs/$pdf
+@$PDF_DIR/$pdf
 
 EOF
 done
@@ -77,8 +75,8 @@ if command -v vegeta >/dev/null 2>&1; then
 
   vegeta report -type=json "$RESULTS_DIR/vegeta-results.bin" > "$RESULTS_DIR/vegeta-report.json"
 else
-  echo ">> Ejecutando Vegeta mediante contenedor Docker peterevans/vegeta (--network host)..."
-  docker run --rm -i --network host \
+  echo ">> Ejecutando Vegeta mediante contenedor Docker peterevans/vegeta..."
+  docker run --rm -i --network pdftrack-deploy_pdftrack-net \
     -v "$ROOT_DIR:/workspace" \
     -w /workspace \
     peterevans/vegeta sh -c '
